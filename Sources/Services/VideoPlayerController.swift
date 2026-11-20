@@ -20,7 +20,7 @@ final class VideoPlayerController {
     private(set) var isPlaying: Bool = false
     private(set) var isMuted: Bool = true
 
-    private var endObserverToken: NSObjectProtocol?
+    nonisolated(unsafe) private var endObserverToken: NSObjectProtocol?
 
     init() {
         let avPlayer = AVPlayer()

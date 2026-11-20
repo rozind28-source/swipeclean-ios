@@ -95,7 +95,10 @@ struct DashboardView: View {
                 }
             }
             .fullScreenCover(isPresented: $vm.showTrashReview) {
-                TrashReviewPlaceholderView {
+                TrashReviewView(
+                    photoService: photoService,
+                    decisionStore: decisionStore
+                ) {
                     vm.showTrashReview = false
                 }
             }

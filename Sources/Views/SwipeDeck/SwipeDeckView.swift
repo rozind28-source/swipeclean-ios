@@ -79,8 +79,15 @@ struct SwipeDeckView: View {
                 }
             }
             .fullScreenCover(isPresented: $viewModel.showTrashReview) {
-                TrashReviewPlaceholderView {
+                TrashReviewView(
+                    group: group,
+                    photoService: photoService,
+                    decisionStore: decisionStore
+                ) {
                     viewModel.showTrashReview = false
+                    if viewModel.isGroupFinished && viewModel.stagedCountInGroup == 0 {
+                        onDismiss()
+                    }
                 }
             }
         }
