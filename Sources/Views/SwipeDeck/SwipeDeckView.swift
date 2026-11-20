@@ -7,6 +7,8 @@ import Photos
 /// 5 нижних кнопок действий и экран завершения группы с приглашением в корзину.
 struct SwipeDeckView: View {
     let group: MediaGroup
+    let photoService: PhotoLibraryService
+    let decisionStore: DecisionStore
     let onDismiss: () -> Void
 
     @Environment(\.scenePhase) private var scenePhase
@@ -20,6 +22,8 @@ struct SwipeDeckView: View {
         onDismiss: @escaping () -> Void
     ) {
         self.group = group
+        self.photoService = photoService
+        self.decisionStore = decisionStore
         self.onDismiss = onDismiss
         _viewModel = State(
             initialValue: SwipeDeckViewModel(
