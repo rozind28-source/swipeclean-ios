@@ -1,5 +1,6 @@
 import UIKit
 import Photos
+import PhotosUI
 import Observation
 
 enum DeleteResult: Sendable {
