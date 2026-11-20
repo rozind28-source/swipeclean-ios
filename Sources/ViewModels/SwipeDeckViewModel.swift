@@ -39,7 +39,7 @@ final class SwipeDeckViewModel {
 
     // Экспорт и Share
     private(set) var isExportingForShare: Bool = false
-    var shareFileURL: URL? = nil
+    nonisolated(unsafe) var shareFileURL: URL? = nil
     var showShareSheet: Bool = false
 
     // Переход в корзину при завершении группы
@@ -71,6 +71,12 @@ final class SwipeDeckViewModel {
         self.engine = SwipeSessionEngine(assetIDs: unreviewed, startIndex: 0)
 
         updateVisibleCards()
+    }
+
+    deinit {
+        if let url = shareFileURL {
+            MediaExportService.cleanupExportedFile(at: url)
+        }
     }
 
     // MARK: - Вычисляемые свойства
@@ -162,10 +168,14 @@ final class SwipeDeckViewModel {
             guard let self = self else { return }
 
             let estimatedSize = self.currentAssetSize
-            self.engine.commitSwipe(assetID: assetID, decision: decision)
+            guard let committedAction = self.engine.commitSwipe(assetID: assetID, decision: decision) else {
+                self.cardOffset = .zero
+                self.engine.isTransitioning = false
+                return
+            }
             self.decisionStore.recordDecision(
-                assetID: assetID,
-                status: decision,
+                assetID: committedAction.assetID,
+                status: committedAction.decision,
                 estimatedBytes: estimatedSize
             )
 
@@ -216,9 +226,9 @@ final class SwipeDeckViewModel {
         guard let currentID = currentAssetID else { return }
         haptics.selection()
 
-        Task {
-            let newFav = await photoService.toggleFavorite(for: currentID)
-            self.isFavorite = newFav
+        Task { [weak self] in
+            let newFav = await self?.photoService.toggleFavorite(for: currentID) ?? false
+            self?.isFavorite = newFav
         }
     }
 
@@ -232,14 +242,18 @@ final class SwipeDeckViewModel {
         isExportingForShare = true
         haptics.impact(.light)
 
-        Task {
+        Task { [weak self] in
             do {
                 let url = try await MediaExportService.shared.exportOriginal(for: asset)
+                guard let self = self else {
+                    MediaExportService.cleanupExportedFile(at: url)
+                    return
+                }
                 self.shareFileURL = url
                 self.showShareSheet = true
                 self.isExportingForShare = false
             } catch {
-                self.isExportingForShare = false
+                self?.isExportingForShare = false
             }
         }
     }
