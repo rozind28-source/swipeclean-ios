@@ -412,6 +412,34 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
         }
     }
 
+    // MARK: - Переключение Избранного (Toggle Favorite)
+
+    @discardableResult
+    func toggleFavorite(for assetID: String) async -> Bool {
+        guard let asset = assetsById[assetID] else { return false }
+        let targetFavorite = !asset.isFavorite
+
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetChangeRequest(for: asset)
+                request.isFavorite = targetFavorite
+            }
+
+            if var meta = metadataById[assetID] {
+                meta.isFavorite = targetFavorite
+                metadataById[assetID] = meta
+            }
+
+            if let updated = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject {
+                assetsById[assetID] = updated
+            }
+
+            return targetFavorite
+        } catch {
+            return asset.isFavorite
+        }
+    }
+
     // MARK: - Пакетное удаление (Batch Delete)
 
     func deleteAssets(ids: [String]) async -> DeleteResult {

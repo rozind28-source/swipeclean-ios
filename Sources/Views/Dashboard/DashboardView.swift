@@ -86,7 +86,11 @@ struct DashboardView: View {
             }
             // КРАСНАЯ ЛИНИЯ: открытие экрана группы строго через .fullScreenCover
             .fullScreenCover(item: $vm.selectedGroup) { group in
-                SwipeDeckPlaceholderView(group: group) {
+                SwipeDeckView(
+                    group: group,
+                    photoService: photoService,
+                    decisionStore: decisionStore
+                ) {
                     vm.selectedGroup = nil
                 }
             }

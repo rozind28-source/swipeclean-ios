@@ -1,8 +1,8 @@
 # Журнал состояния ИИ-агента: SwipeClean (`AGENT_STATE.md`)
 
 *Дата последнего обновления:* 2026-11-20  
-*Текущий этап:* **Фаза 2 завершена (PhotoKit-индексирование, кэш, дашборд)**  
-*Следующий этап:* **Фаза 3 (Свайп-дека, Zoom, Видеоплеер и Share)**  
+*Текущий этап:* **Фаза 3 завершена (Свайп-дека, Zoom, Видеоплеер и Share)**  
+*Следующий этап:* **Фаза 4 (Корзина без прыжков, Удаление, Итоги, Настройки)**  
 
 ---
 
@@ -21,6 +21,10 @@ SwipeClean — нативное iOS-приложение для быстрой �
    - Защита от двойного свайпа и гонок при 120 Гц (`commitSwipe` валидирует `assetID == currentAssetID`).
    - Оппортунистический кэш картинок `ImageCacheManager` на базе `PHCachingImageManager` с безопасным потолком 2048px по длинной стороне и прямым callback-замыканием (без опасного `CheckedContinuation`).
    - Потокобезопасный `actor MediaSizeCalculator` с $O(1)$ RAM-кэшем `[String: Int64]` и безопасным извлечением размера через `responds(to: NSSelectorFromString("fileSize"))` и `NSNumber`.
+   - **[Новое в Фазе 3]** Строго один `AVPlayer` в `@Observable @MainActor VideoPlayerController` с защитой от видео-призрака (`activeAssetID`, `activeRequestID`), зацикливанием по `AVPlayerItemDidPlayToEndTime` с `[weak self]` и умной `AVAudioSession` (ambient по умолчанию, playback при explicit unmute).
+   - **[Новое в Фазе 3]** Свайп и смена карточек на пружинной анимации iOS 17 `withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { ... } completion: { ... }` с защитой флагом `isTransitioning` (0 вызовов `DispatchQueue.main.asyncAfter`).
+   - **[Новое в Фазе 3]** Pinch-to-Zoom (`MagnifyGesture`) + двойной тап (1× ↔ 2.5×) с отключением свайпа при `zoomScale > 1.01` и включением панорамирования.
+   - **[Новое в Фазе 3]** Безопасный экспорт оригинала фото/видео во временную директорию через `MediaExportService` и передача в `ActivityShareSheet` с гарантированным удалением файла в `completionWithItemsHandler` (0 утечек `tmp/`).
 4. **Безопасность SwiftData:** `ModelContainer` инициализируется с `do/catch` и безопасным fallback на in-memory контейнер при сбоях диска или миграций (без `fatalError` и без `try!`).
 5. **Debounced Observer медиатеки:** `PHPhotoLibraryChangeObserver` с debounce 600 мс и флагом `suppressReloadDuringBatchDelete` для предотвращения ложных перезагрузок во время собственных транзакций удаления.
 
@@ -31,14 +35,14 @@ SwipeClean — нативное iOS-приложение для быстрой �
 | Фаза | Название | Статус | Комментарий |
 |---|---|---|---|
 | **Фаза 1** | **Каркас, XcodeGen, CI, Контракты, Тесты, Права** | ✅ **ЗАВЕРШЕНА & ВЕРИФИЦИРОВАНА** | Создан `project.yml`, workflow CI `macos-26`, генератор иконки, каталоги ассетов, все доменные контракты, `SwipeSessionEngine` с XCTest, `DecisionStore`, `PhotoLibraryService`, `AppSettings`, `PermissionView`, `DashboardView`. Пройден статический аудит. CI успешно собирает `.ipa`. |
-| **Фаза 2** | **PhotoKit-индексирование, Кэш и Главный экран** | ✅ **ЗАВЕРШЕНА** | Реализовано фоновое индексирование в `Task.detached` с фильтром `canPerform(.delete)`, 3 режима группировки (Месяцы с русской локалью «Ноябрь 2026», Альбомы без `.albumCloudShared`, Подборки: «Тяжёлые видео» по `estimatedWeightScore`, «Скриншоты», «В этот день», «Случайные 50»), debounced observer (600 мс), пакетное удаление `deleteAssets(ids:)` с перехватом `userCancelled`, `ImageCacheManager` с потолком 2048px и opportunistic callbacks, `actor MediaSizeCalculator`, `@Observable` `DashboardViewModel`, полноценный `DashboardView`, компонент `GroupRowCard`, `SettingsView`, плейсхолдеры для `.fullScreenCover`. Пройден статический аудит 0 нарушений. |
-| **Фаза 3** | Свайп-дека, Zoom, Видеоплеер и Share | ⏳ СЛЕДУЮЩАЯ | Будет реализован `VideoPlayerController` (строго один `AVPlayer` на сессию), `LoopingVideoView`, `MediaExportService`, `ActivityShareSheet`, `SwipeDeckViewModel`, `SwipeDeckView` (в `.fullScreenCover`) и `SwipeCardView` (Pinch/Double-tap Zoom, метаданные с секундами, Undo, Избранное, Share, prefetch 5 вперёд). |
-| **Фаза 4** | Корзина без прыжков, Удаление, Итоги, Настройки | ⏳ ОЖИДАЕТ | Будет реализован `TrashReviewViewModel`, `TrashReviewView` (in-place спасение без прыжков сетки), `SessionCompleteView`, расширение тестов. |
+| **Фаза 2** | **PhotoKit-индексирование, Кэш и Главный экран** | ✅ **ЗАВЕРШЕНА** | Фоновое индексирование в `Task.detached` с фильтром `canPerform(.delete)`, 3 режима группировки (Месяцы «Ноябрь 2026», Альбомы без `.albumCloudShared`, Подборки: Тяжёлые видео, Скриншоты, В этот день, Случайные 50), debounced observer (600 мс), пакетное удаление `deleteAssets(ids:)` с перехватом `userCancelled`, `ImageCacheManager` с потолком 2048px, `actor MediaSizeCalculator`, `@Observable` `DashboardViewModel`, `DashboardView`, `GroupRowCard`, `SettingsView`. Пройден статический аудит. |
+| **Фаза 3** | **Свайп-дека, Zoom, Видеоплеер и Share** | ✅ **ЗАВЕРШЕНА & ВЕРИФИЦИРОВАНА** | Реализован `VideoPlayerController` (один `AVPlayer`, токен актуальности, умная `AVAudioSession`), `LoopingVideoView` (UIViewRepresentable, `.resizeAspectFill`, 0 force-unwrap), `MediaExportService` (экспорт в `tmp/`), `ActivityShareSheet` (очистка в completion), `SwipeDeckViewModel`, `SwipeCardView` (Pinch/Double-tap Zoom, панорамирование, метаданные с секундами, бейджи, iCloud %, штампы «УДАЛИТЬ»/«ОСТАВИТЬ»), `SwipeDeckView` (ZStack 3 карточек, ForEach по `\.localIdentifier`, 5 кнопок действий, экран завершения с корзиной), обновлён `DashboardView` (.fullScreenCover). Пройден статический аудит 0 нарушений. |
+| **Фаза 4** | Корзина без прыжков, Удаление, Итоги, Настройки | ⏳ СЛЕДУЮЩАЯ | Будет реализован `TrashReviewViewModel`, `TrashReviewView` (in-place спасение без прыжков сетки), `SessionCompleteView`, расширение тестов граничных случаев. |
 | **Фаза 5** | Финальный инженерный аудит и релизная полировка | ⏳ ОЖИДАЕТ | Сквозной аудит утечек памяти, проверка крайних случаев (0 медиа, оффлайн iCloud, отмена удаления), проверка 0 нарушений красных линий. |
 
 ---
 
-## 3. Реестр созданных и обновлённых файлов (Фазы 1 и 2)
+## 3. Реестр созданных и обновлённых файлов (Фазы 1, 2 и 3)
 
 ### Конфигурация и CI:
 1. `project.yml` — спецификация XcodeGen (iOS 17.0, `SWIFT_VERSION: "5.0"`, `SWIFT_STRICT_CONCURRENCY: minimal`, bundle ID `com.swipeclean.gallery`, автогенерация `Info.plist` с `NSPhotoLibraryUsageDescription`).
@@ -69,126 +73,136 @@ SwipeClean — нативное iOS-приложение для быстрой �
 
 ### Сервисы (`Sources/Services/`):
 18. `Sources/Services/HapticsService.swift` — тактильная отдача (UIImpact/UINotification/UISelection) с проверкой флага `AppSettings.shared.hapticsEnabled`.
-19. `Sources/Services/PhotoLibraryService.swift` — **[Обновлено в Фазе 2]** Полное фоновое сканирование в `Task.detached`, фильтр `canPerform(.delete)`, 3 режима группировки (Месяцы «Ноябрь 2026», Альбомы без cloud-shared, Подборки: Тяжёлые видео, Скриншоты, В этот день, Случайные 50), debounced observer (600 мс), пакетное удаление `deleteAssets(ids:)` с перехватом `userCancelled`, `presentLimitedLibraryPicker()`.
-20. `Sources/Services/ImageCacheManager.swift` — **[Новое в Фазе 2]** `@MainActor` менеджер кэша картинок на базе `PHCachingImageManager`. Оппортунистические callback-вызовы с `PHImageRequestID`, потолок 2048px по длинной стороне с учётом `displayScale`, отслеживание прогресса iCloud (0...1) и статусов (`isDegraded`, `isInCloud`, `hasError`), методы `startCaching`, `stopCaching`, `cancelRequest`.
-21. `Sources/Services/MediaSizeCalculator.swift` — **[Новое в Фазе 2]** `actor MediaSizeCalculator` с RAM-кэшем `[String: Int64]`. Безопасное чтение размера файла через селектор `responds(to: NSSelectorFromString("fileSize"))` и приведение через `NSNumber`. Ленивый расчёт без массовых XPC-вызовов на 50 000 файлах.
+19. `Sources/Services/PhotoLibraryService.swift` — **[Обновлено в Фазе 3]** Фоновое сканирование, `canPerform(.delete)`, 3 режима группировки, debounced observer, пакетное удаление, `toggleFavorite(for assetID: String) async -> Bool`.
+20. `Sources/Services/ImageCacheManager.swift` — `@MainActor` менеджер кэша картинок на базе `PHCachingImageManager`. Оппортунистические callback-вызовы с `PHImageRequestID`, потолок 2048px по длинной стороне с учётом `displayScale`, отслеживание прогресса iCloud (0...1) и статусов (`isDegraded`, `isInCloud`, `hasError`), `startCaching`, `stopCaching`, `cancelRequest`.
+21. `Sources/Services/MediaSizeCalculator.swift` — `actor MediaSizeCalculator` с RAM-кэшем `[String: Int64]`. Безопасное чтение размера файла через селектор `responds(to: NSSelectorFromString("fileSize"))` и приведение через `NSNumber`.
+22. `Sources/Services/VideoPlayerController.swift` — **[Новое в Фазе 3]** `@Observable @MainActor` контроллер строго единого `AVPlayer` на всю сессию свайпов: защита от видео-призраков через `activeAssetID` и `activeRequestID`, умная `AVAudioSession` (ambient по умолчанию, playback при explicit unmute, возврат в ambient при mute / inactive), зацикливание с `[weak self]`.
+23. `Sources/Services/MediaExportService.swift` — **[Новое в Фазе 3]** Сервис экспорта оригиналов фото (`requestImageDataAndOrientation`) и видео (`writeData` / `requestExportSession`) в `FileManager.default.temporaryDirectory` с последующей очисткой.
 
 ### Модели представлений (`Sources/ViewModels/`):
-22. `Sources/ViewModels/DashboardViewModel.swift` — **[Новое в Фазе 2]** `@Observable @MainActor` ViewModel для главного экрана: связывает `PhotoLibraryService`, `DecisionStore` и `AppSettings`, фильтрует группы по `hideCompletedGroups`, вычисляет `GroupProgress`, общий размер корзины, инициирует сброс прогресса группы и пересборку «Случайных 50».
+24. `Sources/ViewModels/DashboardViewModel.swift` — `@Observable @MainActor` ViewModel для главного экрана: связывает `PhotoLibraryService`, `DecisionStore` и `AppSettings`, фильтрует группы, рассчитывает `GroupProgress`.
+25. `Sources/ViewModels/SwipeDeckViewModel.swift` — **[Новое в Фазе 3]** `@Observable @MainActor` ViewModel для свайп-деки: связывает `SwipeSessionEngine`, `ImageCacheManager`, `VideoPlayerController`, `MediaExportService`, `DecisionStore`, `PhotoLibraryService` и `HapticsService`; управляет вылетом карточки через spring completion, сбросом зума, Undo, Избранным и Share.
 
 ### Приложение и экраны (`Sources/App/`, `Sources/Views/`):
-23. `Sources/App/AppSettings.swift` — `@Observable` обёртка над `UserDefaults` (тема: тёмная по умолчанию, `hapticsEnabled`, `hideCompletedGroups`).
-24. `Sources/App/SwipeCleanApp.swift` — `@main` точка входа с безопасной инициализацией `ModelContainer` (fallback на in-memory при ошибках, без `fatalError` и `try!`).
-25. `Sources/App/RootView.swift` — роутинг между экраном прав `PermissionView` и главным экраном `DashboardView`, поддержка тёмной темы.
-26. `Sources/Views/Permissions/PermissionView.swift` — онбординг прав с 3 тезисами приватности и безопасности + кнопка запроса доступа / перехода в системные настройки.
-27. `Sources/Views/Dashboard/DashboardView.swift` — **[Обновлено в Фазе 2]** Полноценный главный экран: баннер Limited Access, Hero-карточка («Освобождено», «Проверено», «Удалено»), глобальный красный баннер корзины (при `stagedCount > 0`), segmented control режимов (Месяцы | Альбомы | Подборки), LazyVStack с `GroupRowCard`, кнопка перехода в Настройки, `.fullScreenCover(item: $selectedGroup)`.
-28. `Sources/Views/Dashboard/GroupRowCard.swift` — **[Новое в Фазе 2]** Компонент строки группы: обложка 56×56pt с асинхронной загрузкой через `ImageCacheManager`, название, подзаголовок, счётчик прогресса, прогресс-бар, зелёная галочка 100%, красный бейдж корзины группы, contextMenu «Сбросить прогресс этой группы».
-29. `Sources/Views/Settings/SettingsView.swift` — **[Новое в Фазе 2]** Экран настроек: переключение темы (Системная / Тёмная / Светлая), тумблеры Haptics и скрытия разобранных групп, сброс прогресса просмотра (`confirmationDialog`), блок «О приложении».
-30. `Sources/Views/SwipeDeck/SwipeDeckPlaceholderView.swift` — **[Новое в Фазе 2]** Плейсхолдер для `.fullScreenCover(item: $selectedGroup)` с кнопкой возврата (будет заменён на `SwipeDeckView` в Фазе 3).
-31. `Sources/Views/TrashReview/TrashReviewPlaceholderView.swift` — **[Новое в Фазе 2]** Плейсхолдер для `.fullScreenCover(isPresented: $showTrashReview)` (будет заменён на `TrashReviewView` в Фазе 4).
+26. `Sources/App/AppSettings.swift` — `@Observable` обёртка над `UserDefaults` (тема, haptics, скрытие разобранных групп).
+27. `Sources/App/SwipeCleanApp.swift` — `@main` точка входа с безопасной инициализацией `ModelContainer` (fallback на in-memory без `fatalError` и `try!`).
+28. `Sources/App/RootView.swift` — роутинг между экраном прав `PermissionView` и главным экраном `DashboardView`.
+29. `Sources/Views/Permissions/PermissionView.swift` — онбординг прав доступа с кнопкой запроса.
+30. `Sources/Views/Dashboard/DashboardView.swift` — **[Обновлено в Фазе 3]** Главный экран: открытие группы через `.fullScreenCover(item: $vm.selectedGroup)` с реальным `SwipeDeckView`.
+31. `Sources/Views/Dashboard/GroupRowCard.swift` — компонент строки группы с обложкой 56×56, прогресс-баром и contextMenu сброса.
+32. `Sources/Views/Settings/SettingsView.swift` — экран настроек (тема, Haptics, сброс прогресса, «О приложении»).
+33. `Sources/Views/SwipeDeck/LoopingVideoView.swift` — **[Новое в Фазе 3]** `UIViewRepresentable` для `AVPlayerLayer` с `videoGravity = .resizeAspectFill` и 0 force-unwrap.
+34. `Sources/Views/SwipeDeck/ActivityShareSheet.swift` — **[Новое в Фазе 3]** `UIViewControllerRepresentable` для `UIActivityViewController` с гарантированным удалением временного файла в `completionWithItemsHandler`.
+35. `Sources/Views/SwipeDeck/SwipeCardView.swift` — **[Новое в Фазе 3]** Карточка свайпа: фото/видео/LivePhoto, Pinch-to-Zoom (`MagnifyGesture`) + двойной тап (1× ↔ 2.5×), панорамирование при зуме, метаданные с секундами внизу поверх градиента, бейджи, капсула загрузки из iCloud, оверлеи штампов «УДАЛИТЬ» (красный) / «ОСТАВИТЬ» (зелёный).
+36. `Sources/Views/SwipeDeck/SwipeDeckView.swift` — **[Новое в Фазе 3]** Экран свайп-деки: верхняя панель (✕, остаток, корзина группы), ZStack из 3 карточек (ForEach с `id: \.localIdentifier`), 5 нижних кнопок действий, экран завершения группы с приглашением в корзину при `stagedCount > 0`.
+37. `Sources/Views/TrashReview/TrashReviewPlaceholderView.swift` — плейсхолдер для `.fullScreenCover(isPresented: $showTrashReview)` (будет заменён на `TrashReviewView` в Фазе 4).
 
 ---
 
-## 4. Публичные сигнатуры ключевых компонентов Фазы 2
+## 4. Публичные сигнатуры ключевых компонентов Фазы 3
 
-### Сервис медиатеки (`PhotoLibraryService`):
+### Контроллер видеоплеера (`VideoPlayerController`):
 ```swift
-enum DeleteResult: Sendable {
-    case success(count: Int)
+@Observable @MainActor
+final class VideoPlayerController {
+    static let shared: VideoPlayerController
+    let player: AVPlayer
+    private(set) var activeAssetID: String?
+    private(set) var activeRequestID: PHImageRequestID?
+    private(set) var isPlaying: Bool
+    private(set) var isMuted: Bool
+
+    func loadVideo(for asset: PHAsset)
+    func play()
+    func pause()
+    func togglePlayPause()
+    func toggleMute()
+    func setMuted(_ muted: Bool)
+    func handleScenePhaseChange(_ phase: ScenePhase)
+    func reset()
+}
+```
+
+### Представление зацикленного видео (`LoopingVideoView`):
+```swift
+struct LoopingVideoView: UIViewRepresentable {
+    let player: AVPlayer
+    func makeUIView(context: Context) -> PlayerUIView
+    func updateUIView(_ uiView: PlayerUIView, context: Context)
+}
+```
+
+### Сервис экспорта медиа (`MediaExportService`):
+```swift
+enum MediaExportError: LocalizedError {
+    case assetNotFound
+    case exportFailed(String)
     case cancelled
-    case failure(Error)
+}
+
+final class MediaExportService: Sendable {
+    static let shared: MediaExportService
+    func exportOriginal(for asset: PHAsset) async throws -> URL
+    static func cleanupExportedFile(at url: URL)
+}
+```
+
+### Системный лист «Поделиться» (`ActivityShareSheet`):
+```swift
+struct ActivityShareSheet: UIViewControllerRepresentable {
+    let fileURL: URL
+    var onComplete: (() -> Void)?
+    func makeUIViewController(context: Context) -> UIActivityViewController
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context)
+}
+```
+
+### Модель свайп-деки (`SwipeDeckViewModel`):
+```swift
+enum SwipeDirection {
+    case left   // stagedForTrash
+    case right  // kept
 }
 
 @Observable @MainActor
-final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
-    private(set) var currentStatus: PHAuthorizationStatus
-    private(set) var isIndexing: Bool
-    private(set) var assetsById: [String: PHAsset]
-    private(set) var metadataById: [String: MediaMetadata]
-    private(set) var allDeletableAssetIDs: [String]
-    private(set) var monthGroups: [MediaGroup]
-    private(set) var albumGroups: [MediaGroup]
-    private(set) var smartGroups: [MediaGroup]
-    var suppressReloadDuringBatchDelete: Bool
-    var onIndexingFinished: (([String]) -> Void)?
+final class SwipeDeckViewModel {
+    let group: MediaGroup
+    let videoController: VideoPlayerController
 
-    func refreshStatus()
-    @discardableResult func requestAuthorization() async -> PHAuthorizationStatus
-    func groups(for mode: CleaningMode) -> [MediaGroup]
-    func startIndexing()
-    func reshuffleRandom50(unreviewedIDs: [String]?)
-    func deleteAssets(ids: [String]) async -> DeleteResult
-    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange)
-    func presentLimitedLibraryPicker()
-}
-```
+    private(set) var visibleAssetIDs: [String]
+    private(set) var isGroupFinished: Bool
+    private(set) var currentAssetSize: Int64
+    private(set) var isFavorite: Bool
 
-### Менеджер кэша изображений (`ImageCacheManager`):
-```swift
-struct ImageDeliveryInfo: Sendable {
-    let isDegraded: Bool
-    let isInCloud: Bool
-    let hasError: Bool
-}
+    var cardOffset: CGSize
+    var zoomScale: CGFloat
+    var zoomOffset: CGSize
 
-@MainActor
-final class ImageCacheManager {
-    static let shared: ImageCacheManager
-    static func targetSize(for containerSize: CGSize, displayScale: CGFloat) -> CGSize
-
-    @discardableResult
-    func requestImage(
-        for asset: PHAsset,
-        targetSize: CGSize,
-        contentMode: PHImageContentMode = .aspectFill,
-        progressHandler: ((Double) -> Void)? = nil,
-        resultHandler: @escaping @MainActor (UIImage?, ImageDeliveryInfo) -> Void
-    ) -> PHImageRequestID
-
-    func cancelRequest(id: PHImageRequestID)
-    func startCaching(for assets: [PHAsset], targetSize: CGSize, contentMode: PHImageContentMode = .aspectFill)
-    func stopCaching(for assets: [PHAsset], targetSize: CGSize, contentMode: PHImageContentMode = .aspectFill)
-    func stopCachingForAllAssets()
-}
-```
-
-### Калькулятор размера файлов (`MediaSizeCalculator`):
-```swift
-actor MediaSizeCalculator {
-    static let shared: MediaSizeCalculator
-
-    func size(for asset: PHAsset) -> Int64
-    func cachedSize(for localIdentifier: String) -> Int64?
-    func setCachedSize(_ size: Int64, for localIdentifier: String)
-    func removeSize(for localIdentifier: String)
-    func clearCache()
-}
-```
-
-### Модель главного экрана (`DashboardViewModel`):
-```swift
-@Observable @MainActor
-final class DashboardViewModel {
-    var selectedMode: CleaningMode
-    var selectedGroup: MediaGroup?
-    var showSettings: Bool
+    private(set) var isExportingForShare: Bool
+    var shareFileURL: URL?
+    var showShareSheet: Bool
     var showTrashReview: Bool
 
-    func configure(photoService: PhotoLibraryService, decisionStore: DecisionStore, settings: AppSettings)
-    var isIndexing: Bool { get }
-    var isLimitedAccess: Bool { get }
-    var filteredGroups: [MediaGroup] { get }
-    var stagedCount: Int { get }
-    var stagedTotalBytes: Int64 { get }
-    var stats: StatsSnapshot { get }
+    var isTransitioning: Bool { get }
+    var canUndo: Bool { get }
+    var remainingCount: Int { get }
+    var totalGroupCount: Int { get }
+    var reviewedCount: Int { get }
+    var currentAssetID: String? { get }
+    var currentAsset: PHAsset? { get }
+    var currentMetadata: MediaMetadata? { get }
+    var groupProgress: GroupProgress { get }
+    var stagedCountInGroup: Int { get }
+    var stagedBytesInGroup: Int64 { get }
 
-    func progress(for group: MediaGroup) -> GroupProgress
-    func coverAsset(for group: MediaGroup) -> PHAsset?
-    func resetGroupProgress(_ group: MediaGroup)
-    func reshuffleRandom50()
-    func openLimitedAccessPicker()
-    func openSystemSettings()
-    func onAppear()
+    func onAppear(containerSize: CGSize, displayScale: CGFloat)
+    func onDisappear()
+    func swipe(direction: SwipeDirection, assetID: String)
+    func undo()
+    func toggleFavorite()
+    func exportAndShare()
+    func asset(for id: String) -> PHAsset?
+    func metadata(for id: String) -> MediaMetadata?
 }
 ```
 
@@ -200,37 +214,39 @@ final class DashboardViewModel {
 |---|---|---|---|
 | 1 | `SWIFT_VERSION: "5.0"` и `SWIFT_STRICT_CONCURRENCY: minimal` | ✅ PASS | Проверено в `project.yml`. |
 | 2 | Раннер `macos-26` в GitHub Actions | ✅ PASS | Проверено в `.github/workflows/build-ios.yml`. |
-| 3 | Запрет оборачивания `requestImage` при `.opportunistic` в `CheckedContinuation` | ✅ PASS | `ImageCacheManager` использует прямое callback-замыкание с возвратом `PHImageRequestID` и диспатчем на `@MainActor`. 0 вызовов `CheckedContinuation`. |
+| 3 | Запрет оборачивания `requestImage` при `.opportunistic` в `CheckedContinuation` | ✅ PASS | `ImageCacheManager` использует прямое callback-замыкание с возвратом `PHImageRequestID` и диспатчем на `@MainActor`. 0 вызовов `CheckedContinuation` для оппортунистических картинок. |
 | 4 | Фильтрация `asset.canPerform(.delete)` | ✅ PASS | В `PhotoLibraryService` все группы формируются строго с фильтром `asset.canPerform(.delete) == true`. В `deleteAssets` повторно проверяется `canPerform(.delete)`. Пользовательские альбомы исключают `.albumCloudShared`. |
-| 5 | Запрет `@Query` во View для выгрузки всей таблицы; только примитивные поля в `#Predicate` | ✅ PASS | `DashboardView` и `DashboardViewModel` используют RAM-кэш `DecisionStore`. Никаких `@Query` в представлениях. В предикатах SwiftData сравниваются только примитивные поля `assetIdentifier` и `statusRaw`. |
+| 5 | Запрет `@Query` во View для выгрузки всей таблицы; только примитивные поля в `#Predicate` | ✅ PASS | `DashboardView`, `SwipeDeckView`, `SwipeDeckViewModel` используют RAM-кэш `DecisionStore`. Никаких `@Query` в представлениях. В предикатах SwiftData сравниваются только примитивные поля `assetIdentifier` и `statusRaw`. |
 | 6 | Запрет массового обращения к `assetResources(for:)`; безопасный `fileSize` через `responds(to:)` | ✅ PASS | Сканирование Дашборда не обращается к `PHAssetResource`. `MediaSizeCalculator` является `actor` с RAM-кэшем `[String: Int64]` и извлекает `fileSize` строго через `resource.responds(to: NSSelectorFromString("fileSize"))` и приведение через `NSNumber`. |
-| 7 | Запрет `PHImageManagerMaximumSize` и deprecated `UIScreen.main` | ✅ PASS | `ImageCacheManager.targetSize` вычисляет размер с потолком 2048px по длинной стороне; `GroupRowCard` получает `displayScale` из `@Environment(\.displayScale)`. 0 обращений к `UIScreen.main`. |
-| 8 | Запрет 1-параметрового `.onChange` и `NavigationView` | ✅ PASS | Все экраны (`DashboardView`, `SettingsView`, `SwipeDeckPlaceholderView`, `TrashReviewPlaceholderView`) используют `NavigationStack`. Устаревший `.onChange` отсутствует (0 вхождений). |
-| 9 | Открытие деки строго через `.fullScreenCover` | ✅ PASS | В `DashboardView` открытие группы выполнено через `.fullScreenCover(item: $vm.selectedGroup)`. Никаких `NavigationLink` для перехода в свайп-деку. |
-| 10 | Запрет `DispatchQueue.asyncAfter` для свайпа | ✅ PASS | Смена карточек опирается на флаг `isTransitioning` и completion блока `withAnimation` (подготовлено в `SwipeSessionEngine`). |
-| 11 | Запрет передачи `PHAsset` в `ShareLink` и раздельных `AVPlayer` | ✅ PASS | Будет реализовано в Фазе 3 (`MediaExportService` + единый `VideoPlayerController`). |
-| 12 | Запрет `fatalError`, `try!`, force-unwrap `!`, обязательный `[weak self]` | ✅ PASS | Статический аудит показал 0 вхождений `try!`, 0 вхождений `fatalError`, 0 force-unwrap. Все замыкания `PHImageManager` и наблюдателей используют `[weak self]`. |
+| 7 | Запрет `PHImageManagerMaximumSize` и deprecated `UIScreen.main` | ✅ PASS | `ImageCacheManager.targetSize` вычисляет размер с потолком 2048px по длинной стороне; `SwipeCardView` и `SwipeDeckView` получают `displayScale` из `@Environment(\.displayScale)` и геометрию из `GeometryReader`. 0 обращений к `UIScreen.main`. |
+| 8 | Запрет 1-параметрового `.onChange` и `NavigationView` | ✅ PASS | Все представления используют 2-параметровый `.onChange(of:) { _, newValue in }` (в `SwipeCardView` и `SwipeDeckView`). Все навигационные контейнеры — `NavigationStack`. `NavigationView` отсутствует (0 вхождений). |
+| 9 | Открытие деки строго через `.fullScreenCover` | ✅ PASS | В `DashboardView` открытие группы выполнено через `.fullScreenCover(item: $vm.selectedGroup) { group in SwipeDeckView(...) }`. Никаких `NavigationLink` для перехода в свайп-деку. |
+| 10 | Запрет `DispatchQueue.asyncAfter` для свайпа | ✅ PASS | Смена карточек в `SwipeDeckViewModel` опирается на iOS 17 `withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { ... } completion: { ... }` и флаг `isTransitioning` в `SwipeSessionEngine`. 0 вхождений `asyncAfter`. `ForEach` в деке использует строго `id: \.localIdentifier`. |
+| 11 | Запрет передачи `PHAsset` в `ShareLink` и раздельных `AVPlayer` | ✅ PASS | Реализован `MediaExportService` (экспорт оригинала в `tmp/`) + `ActivityShareSheet` с очисткой в `completionWithItemsHandler` (0 вызовов `ShareLink`). Строго один `AVPlayer` на сессию в `VideoPlayerController` с токенами `activeAssetID` и `activeRequestID`. |
+| 12 | Запрет `fatalError`, `try!`, force-unwrap `!`, обязательный `[weak self]` | ✅ PASS | Статический аудит 32 swift-файлов показал: 0 вхождений `try!`, 0 вхождений `fatalError`, 0 force-cast (`as!`), 0 force-unwrap опционалов. Все замыкания `PHImageManager`, `NotificationCenter` и анимаций содержат `[weak self]`. |
 
 ---
 
-## 6. Design Check Фазы 2 (Протокол инженерного мышления)
+## 6. Design Check Фазы 3 (Протокол инженерного мышления)
 
 1. **Акторная изоляция и безопасность потоков:**
-   - `PhotoLibraryService`, `ImageCacheManager`, `DashboardViewModel`, `DecisionStore` строго изолированы на `@MainActor`.
-   - Фоновое сканирование медиатеки выполняется в `Task.detached(priority: .userInitiated)` с независимым сбором словарей и передачей результата на `@MainActor` через `await MainActor.run`.
-   - `MediaSizeCalculator` изолирован в собственном `actor`, гарантируя потокобезопасный доступ к кэшу размеров без блокировки UI.
+   - `VideoPlayerController`, `SwipeDeckViewModel`, `ImageCacheManager`, `DecisionStore`, `PhotoLibraryService` строго изолированы на `@MainActor`.
+   - `MediaExportService` работает асинхронно, экспортируя бинарные данные оригинала через потокобезопасные PhotoKit API с блокировкой `NSLock` против повторных вызовов `continuation.resume`.
+   - `LoopingVideoView` и `ActivityShareSheet` реализованы как UIKit-обёртки на главном потоке.
    - Ни один объект `@Model` SwiftData не передаётся через границы акторов.
 2. **Отмена асинхронных операций:**
-   - В `PhotoLibraryService` задачи индексирования (`indexingTask`) и дебаунса обсервера (`debounceTask`) отменяются перед запуском новых задач, а также проверяют `Task.isCancelled`.
-   - В `ImageCacheManager` реализован метод `cancelRequest(id: PHImageRequestID)`.
-   - В `GroupRowCard` запрос превью отменяется при вызове `.onDisappear`.
+   - В `VideoPlayerController` при смене карточки, закрытии экрана или паузе отменяется предыдущий `activeRequestID` (`cancelImageRequest`), вызывается `player.pause()`, очищается `replaceCurrentItem(with: nil)`, а в callback проверяется `guard self.activeAssetID == targetAssetID else { return }`.
+   - Умная `AVAudioSession`: в фоне (`scenePhase != .active`) или при возврате в mute плеер ставится на паузу, аудиосессия переводится в `.ambient` и деактивируется с `.notifyOthersOnDeactivation`.
+   - В `SwipeCardView` запрос превью `requestID` отменяется в `.onDisappear` и при смене `localIdentifier`.
+   - Временный файл экспорта удаляется в `completionWithItemsHandler` `ActivityShareSheet`.
 3. **Сложность алгоритмов и оптимизация:**
-   - Отображение главного экрана выполняется без $O(N)$ запросов к диску или базе данных.
-   - Чтение прогресса групп и решений производится за $O(1)$ из RAM-кэша `DecisionStore`.
-   - Сканирование галереи на 50 000+ элементов выполняется один раз в фоне, не вызывая XPC-запросов `PHAssetResource`.
+   - `ZStack` в `SwipeDeckView` рендерит максимум 3 видимые карточки (`visibleAssetIDs.prefix(3)`).
+   - Префетч изображений и расчёт веса выполняется лениво для следующих 5 карточек вперед.
+   - Форматирование даты с секундами кэшировано в статическом `DateFormatter` с русской локалью `ru_RU`.
+   - Никаких $O(N)$ операций внутри `body` представлений.
 
 ---
 
-## 7. Готовность к Фазе 3
+## 7. Готовность к Фазе 4
 
-Фаза 2 полностью завершена и статически проверена. Все файлы подготовлены для дальнейшей реализации Фазы 3 (Свайп-дека, Zoom, единый видеоплеер `VideoPlayerController` и сервис экспорта оригинала `MediaExportService`).
+Фаза 3 полностью завершена, статически проверена и готова к началу Фазы 4 (Корзина без прыжков `TrashReviewView`, пакетное удаление, экран итогов `SessionCompleteView`, настройки и расширение юнит-тестов).
